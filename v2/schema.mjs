@@ -1,10 +1,11 @@
 import {z} from 'zod';
 const text=z.string().trim().min(1).max(500);
 const date=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(s=>!Number.isNaN(Date.parse(s)) && new Date(s).toISOString().slice(0,10)===s,'Invalid calendar date');
-export const productSchema=z.object({kind:z.enum(['sake','wine']),name:text,producer:text,vintage:text.nullable().optional(),variant:text.nullable().optional(),sources:z.array(z.object({kind:z.enum(['label','user','official','sakenowa']),reference:text,note:z.string().max(2000).optional()})).min(1).max(30)}).strict();
+export const productSchema=z.object({kind:z.enum(['sake','wine','whisky','beer','spirits','other']),name:text,producer:text,vintage:text.nullable().optional(),variant:text.nullable().optional(),sources:z.array(z.object({kind:z.enum(['label','user','official','sakenowa']),reference:text,note:z.string().max(2000).optional()})).min(1).max(30)}).strict();
 export const bottleSchema=z.object({volumeMl:z.number().int().positive().max(100000).nullable().optional(),purchaseDate:date.nullable().optional(),price:z.number().finite().nonnegative().nullable().optional(),currency:z.string().regex(/^[A-Z]{3}$/).nullable().optional(),location:text.nullable().optional(),note:z.string().max(4000).optional()}).strict();
 export const addSchema=z.object({action:z.literal('add'),product:productSchema.optional(),productId:text.optional(),bottle:bottleSchema,count:z.number().int().min(1).max(100).default(1)}).strict().refine(x=>Boolean(x.product)!==Boolean(x.productId),'Provide product OR an existing productId');
 export const consumeSchema=z.object({action:z.literal('consume'),bottleId:text,date}).strict();
 export const preferenceSchema=z.object({action:z.literal('preferences'),preferences:z.object({likes:z.array(text).max(50),dislikes:z.array(text).max(50),notes:z.string().max(4000)}).strict()}).strict();
-export const changeSchema=z.union([addSchema,consumeSchema,preferenceSchema]);
+export const editSchema=z.object({action:z.literal('edit'),bottleId:text,bottle:bottleSchema.refine(v=>Object.keys(v).length>0,'Provide at least one field')}).strict();
+export const changeSchema=z.union([addSchema,consumeSchema,editSchema,preferenceSchema]);
 export const requestIdSchema=z.string().regex(/^[a-zA-Z0-9_-]{8,100}$/);

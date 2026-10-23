@@ -27,9 +27,9 @@ export class SqliteStore {
     const old=this.db.prepare('SELECT * FROM drafts WHERE id=?').get(requestId);
     if(old){if(old.fingerprint!==fingerprint)throw new Error('Request ID reused with different content');return this.preview(old);}
     if(payload.action==='add' && payload.productId && !this.db.prepare('SELECT id FROM products WHERE id=?').get(payload.productId))throw new Error('Unknown productId');
-    if(payload.action==='consume'){
+    if(payload.action==='consume' || payload.action==='edit'){
       const b=this.db.prepare('SELECT status FROM bottles WHERE id=?').get(payload.bottleId);
-      if(!b)throw new Error('Unknown bottle');if(b.status!=='available')throw new Error('Bottle already consumed');
+      if(!b)throw new Error('Unknown bottle');if(payload.action==='consume' && b.status!=='available')throw new Error('Bottle already consumed');
     }
     // Only draft data is saved here; inventory is unchanged until commit.
     const row={id:requestId,fingerprint,payload:JSON.stringify(payload),expires:Date.now()+3600000,result:null};
@@ -63,6 +63,11 @@ export class SqliteStore {
         if(!old || old.status!=='available')throw new Error('Bottle no longer available; refresh inventory');
         this.db.prepare("UPDATE bottles SET status='consumed',data=? WHERE id=?").run(JSON.stringify({...JSON.parse(old.data),consumedDate:p.date}),p.bottleId);
         result={action:'consume',bottleId:p.bottleId,date:p.date};
+      }else if(p.action==='edit'){
+        const old=this.db.prepare('SELECT data FROM bottles WHERE id=?').get(p.bottleId);
+        if(!old)throw new Error('Unknown bottle');
+        this.db.prepare('UPDATE bottles SET data=? WHERE id=?').run(JSON.stringify({...JSON.parse(old.data),...p.bottle}),p.bottleId);
+        result={action:'edit',bottleId:p.bottleId};
       }else{
         this.db.prepare('INSERT INTO preferences VALUES (1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(JSON.stringify(p.preferences));result={action:'preferences',preferences:p.preferences};
       }

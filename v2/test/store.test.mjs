@@ -54,6 +54,6 @@ test('Notion adapter follows pagination, joins product, excludes consumed and ne
  calls.push({url,...o});return {ok:true,json:async()=>url.includes('/pages/')?{url:'https://notion.so/p1',properties:{'Sake name':{title:[{plain_text:'Sake'}]},Brewery:{rich_text:[{plain_text:'Brewery'}]}}}:++n===1?{results:[{id:'b1',properties:props(false)}],has_more:true,next_cursor:'next'}:{results:[{id:'b2',properties:props(true)}],has_more:false}};
  }});
  const inv=await store.listInventory();assert.equal(inv.length,1);assert.equal(inv[0].product.name,'Sake');
- assert.equal(JSON.parse(calls.at(-1).body).start_cursor,'next');assert.throws(()=>store.prepare(),/not implemented/);
+ assert.equal(JSON.parse(calls.filter(c=>c.url.endsWith('/query')).at(-1).body).start_cursor,'next');await assert.rejects(store.prepare(),/writes require/);
  assert.ok(calls.every(c=>c.method==='GET'||c.url.endsWith('/query')));
 });

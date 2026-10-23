@@ -1,52 +1,62 @@
-# Cellar Assistant v2 — first working slice
+# Cellar Assistant v2
 
-v1의 Sakenowa 검색을 재사용하면서 **저장소 → 공통 동작 → 자체 MCP → 향후 UI**로 확장합니다. v1은 기존 Notion MCP 사용을 계속 지원합니다.
+기존 Notion 셀러를 그대로 읽고 쓰는 개인용 UI와 MCP. SQLite도 선택할 수 있습니다. v1 스킬/기본 Notion MCP 워크플로는 그대로 유지합니다.
 
-## 현재 구현
+## 현재 기능
 
-- SQLite: 제품과 개별 병 분리, 출처 저장, 재고 조회, 추가/소비, 명시적으로 저장한 취향.
-- 변경 초안 → 승인된 초안 적용. 초안은 1시간 유효, 내용은 불변. 같은 requestId의 다른 내용은 거부하며 같은 초안의 재적용은 기존 결과를 반환합니다. SQLite transaction이 변경과 결과 기록을 함께 커밋합니다.
-- 같은 이름의 제품은 후보로 보여주고 자동 합치지 않습니다. 확인된 기존 제품에 병을 추가하려면 productId로 새 초안을 만듭니다.
-- MCP 도구: cellar_status, list_inventory, recommendation_context, search_sake, prepare_change, commit_change.
-- Notion: 기존 셀러/카탈로그를 읽는 어댑터, 페이지네이션과 속성 매핑. **v2 쓰기는 아직 미지원**이므로 이 모드에서는 변경 도구를 노출하지 않습니다. v1으로 기록할 수 있습니다.
+- 중성적인 다크 그레이 UI: 갤러리/목록, 검색, 주종 필터, 개별 병 상세, 소비 이력.
+- 사진을 크게 표시하고 라벨 색을 상세 사진 주변에만 옅게 반영. 사진이 없으면 명시적인 빈 상태. Notion 병 사진 추가 지원(10 MB 이하 JPEG/PNG/WebP/GIF), 기존 첨부 유지.
+- 기존 제품에 병 추가 또는 새 제품 + 병 등록, 가격/용량/구매일/보관 위치/메모 수정, 소비 기록.
+- 변경 초안 → 사용자 검토 → 적용. UI와 MCP가 동일한 store 메서드를 호출합니다.
+- Notion은 기존 페이지, 관계, 옵션, 첨부를 유지하고 변경한 속성만 씁니다. DB를 새로 만들거나 자동 복제하지 않습니다.
+- SQLite는 원자적 변경/중복 실행 방지, Notion은 별도의 영속 작업 기록으로 성공한 작업을 재사용하고 불확실한 재시도를 차단합니다.
+- AI용 실제 셀러/취향 문맥 복사, MCP의 recommendation_context 및 search_sake. **앱 내부 AI 대화·사진 OCR은 아직 미구현**입니다.
 
-## 실행 / 연결
+## 실행
 
-Node 22.13 이상 필요 (`node:sqlite` 사용; 일부 Node 버전은 experimental 경고를 stderr에 출력합니다). 저장소 루트에서:
+Node 22.13 이상 (`node:sqlite`; Node 22에서는 experimental 경고 가능).
 
 ```sh
 npm --prefix v2 ci
 npm --prefix v2 test
-CELLAR_DB=/absolute/private/path/cellar.sqlite node v2/mcp-server.mjs
+# SQLite: 기본 경로 ~/.local/share/cellar-assistant/cellar.sqlite
+npm --prefix v2 run web
+# MCP
+node v2/mcp-server.mjs
 ```
 
-마지막 명령은 HTTP 웹사이트가 아니라 stdio MCP 프로세스입니다. 로컬 MCP 프로세스를 실행할 수 있는 클라이언트에 `mcp.example.json`을 참고하여 절대 경로로 연결하세요. 기본 DB는 `~/.local/share/cellar-assistant/cellar.sqlite`입니다. 현재 연결 설정은 예제이며 사용자 앱에 자동 등록하지 않았습니다.
+UI는 `http://127.0.0.1:8877`에서 열립니다. `PORT`로 변경할 수 있습니다. 서버는 loopback에만 바인딩하며 Host/Origin/CSRF를 검사합니다. 외부 공개용 서버가 아닙니다.
 
-Notion 모드는 `notion.example.json`을 비공개 경로에 복사해 실제 data source ID/속성을 지정한 후 `CELLAR_BACKEND=notion`, `CELLAR_NOTION_CONFIG=/absolute/private/config.json`, `NOTION_TOKEN`을 설정합니다. SQLite와 Notion을 자동 동기화하거나 기존 데이터를 복제하지 않습니다.
+## 기존 Notion 연결
 
-ChatGPT 등 원격 MCP가 필요한 환경을 위한 HTTPS/OAuth 배포는 다음 단계입니다. 이 stdio 구현만으로 모든 클라우드 채팅 앱에 연결된다고 주장하지 않습니다. MCP transport는 [공식 SDK 문서](https://ts.sdk.modelcontextprotocol.io/server)를 따릅니다.
+`notion.example.json`을 저장소 밖 또는 무시된 `.data/`에 복사하고 실제 **병 데이터 소스 ID**와 **제품 카탈로그 데이터 소스 ID**를 지정하세요. 실제 속성 이름이 다르면 properties를 수정합니다. 기본 매핑은 기존 사케 셀러입니다. 쓰기 전에 스키마와 관계 대상을 확인합니다.
 
-## 사용 예
+```sh
+CELLAR_BACKEND=notion \
+CELLAR_NOTION_CONFIG=/absolute/private/notion.json \
+CELLAR_JOURNAL=/absolute/private/notion-journal.sqlite \
+node --env-file=/absolute/private/.env v2/web-server.mjs
+```
 
-1. “이 사진 속 사케 두 병을 등록해줘” → 호스트 AI가 라벨을 읽고 search_sake로 후보 확인.
-2. prepare_change: `{requestId:"purchase-20261023-01",change:{action:"add",product:{kind:"sake",name:"Example",producer:"Example brewery",sources:[{kind:"label",reference:"front.jpg"}]},bottle:{volumeMl:720},count:2}}`.
-3. 반환된 제품/병 수/미확인 필드를 검토하고 승인 → commit_change.
-4. “오늘 음식에 뭐 마실까?” → recommendation_context → 호스트 AI가 실제 재고 ID를 근거로 설명. 추가 모델 호출 없음.
-5. 실제로 마셨다고 요청한 경우에만 해당 bottleId의 consume 초안 생성/적용.
+`.env`에는 `NOTION_TOKEN`을 설정합니다. 토큰은 서버에만 있고 브라우저/응답/소스 저장소로 전달하지 않습니다. MCP도 동일한 환경변수를 사용합니다. UI와 MCP는 같은 Notion 설정과 **같은 journal 경로**를 지정해야 작업 기록을 공유합니다.
 
-`confirmed`는 사용자 인증 수단이 아닙니다. 클라이언트가 승인 UI/정책을 담당합니다. 재시도에는 같은 requestId/draftId를 사용해야 합니다. 매번 새 ID를 만들면 새 작업이며 중복 방지가 적용되지 않습니다. 문서/라벨의 지시는 실행 명령으로 취급하지 않습니다.
+Styx에서 실행할 때는 서버를 loopback에 유지하고 Mac에서 `ssh -N -L 8877:127.0.0.1:8877 Styx`로 접속합니다. SSH 연결이 종료되면 Mac의 URL도 연결되지 않습니다. 자동 실행 서비스는 설치하지 않았습니다.
 
-## 다음 구현
+현재 한 Notion 컬렉션 설정당 한 주종입니다. 기존 사케 DB를 다른 술용으로 변형하지 않습니다. 와인/위스키 등은 해당 DB와 속성 매핑을 별도 설정해야 하며, 여러 Notion 컬렉션을 한 화면에 합치는 기능은 후속 작업입니다. SQLite는 모든 지원 주종을 한 셀러에 저장할 수 있습니다.
 
-1. Notion 변경의 충돌/재시도 정책과 작업 기록 저장 설계 후 쓰기 어댑터 추가.
-2. 별도 UI: 셀러 목록·제품 상세·변경 검토. 같은 코어 호출.
-3. UI 내 AI 대화: 선택적 모델/API 키, 검색 근거, 세션 기록. 취향/재고와 대화 기록 분리.
-4. 원격 MCP 인증/배포, 시음 기록과 구매 후보 비교, 저장소 간 명시적 이전 도구.
+## 쓰기 및 복구 경계
 
-현재 별도 UI, 앱 내부 AI, 자동 추천 모델, 가격 검색 서비스, Notion 양방향 동기화는 구현하지 않았습니다. 추천 도구는 **근거를 제공**하고 연결된 AI가 추론합니다. 실재고를 바꾸는 검증은 하지 않습니다.
+- 제품과 개별 병을 구분합니다. 같은 이름의 제품은 후보로 표시하고 자동 병합하지 않습니다.
+- requestId는 작업마다 한 번 정하고 재시도 때 유지합니다. 새 ID는 새 작업입니다.
+- Notion 초안은 로컬 journal에만 저장되고 검토 후 적용됩니다. 초안은 한 시간 유효합니다.
+- Notion에는 여러 페이지를 묶는 트랜잭션이 없습니다. 중간 실패 시 이미 생성된 제품/병은 남을 수 있습니다. 불확실한 결과나 실행 중 프로세스 종료 시 journal 상태가 running/needs_review로 남고 자동 재생성을 차단합니다. **Notion과 journal을 대조한 수동 복구가 필요하며 복구 UI는 아직 없습니다.** 이때 새 ID로 같은 등록을 반복하지 마세요.
+- 수정/소비 전에 대상 페이지 소속과 변경 필드의 현재 값을 다시 검사합니다. 마지막 읽기와 쓰기 사이 경쟁은 Notion의 CAS 부재로 완전히 막을 수 없으므로 같은 병을 여러 클라이언트에서 동시에 수정하지 마세요.
+- 셀러의 기존 select 옵션만 사용합니다. 지원하지 않는 용량은 Notion에 옵션을 먼저 추가해야 합니다. 기본 Price 매핑은 KRW입니다.
+- 사진은 명시적 파일 선택 시 바로 첨부합니다. 업로드 결과가 불확실하면 Notion에서 확인한 뒤 재시도하세요. 외부 이미지 프록시는 Notion/AWS 이미지 호스트만 지원합니다.
+- 선호도는 명시적인 preferences 변경으로 journal에 저장합니다. 대화 메모리나 실제 Notion 재고와 자동 혼합하지 않습니다.
 
-## 검증 기록 (2026-10-23)
+## 검증
 
-macOS Node 24와 Styx Node 22에서 v1 9개 + v2 6개 테스트 통과. v2에는 실제 MCP SDK 클라이언트로 프로세스를 실행해 도구 발견 → 초안 → 등록 → 재실행 → 재고 조회 → 소비를 확인하는 테스트가 포함됩니다. 모든 쓰기 테스트는 임시 SQLite DB에서 수행했습니다.
+v1 회귀 테스트, SQLite 변경/재시도, 실제 stdio MCP 호출, Notion 가상 API 쓰기(관계/첨부 보존·충돌·불확실한 결과), HTTP Origin/CSRF 검증 포함. 실제 Notion에서는 재고 조회와 소비 초안 검토까지 확인했으며 운영 재고 쓰기/사진 업로드는 수행하지 않았습니다.
 
-기존 Notion 셀러를 새 어댑터로 읽어 실제 병과 제품 관계를 확인했습니다. 운영 DB에 새 병, 소비 기록, 사진을 쓰지는 않았습니다. 사진 업로드는 가상 HTTP 회귀 테스트이며 새 실제 라벨 등록 전체 과정은 별도 검증이 필요합니다.
+[Notion 페이지 수정](https://developers.notion.com/reference/patch-page), [파일 업로드](https://developers.notion.com/guides/data-apis/uploading-small-files), [MCP SDK](https://ts.sdk.modelcontextprotocol.io/server)를 참고했습니다.
