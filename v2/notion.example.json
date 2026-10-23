@@ -1,0 +1,4 @@
+{
+  "dataSourceId": "REPLACE_WITH_PHYSICAL_CELLAR_DATA_SOURCE_ID",
+  "properties": {"title":"#","relation":"Sakes","consumed":"Consumed","note":"Note","volume":"용량","location":"저장위치","productTitle":"Sake name","producer":"Brewery"}
+}

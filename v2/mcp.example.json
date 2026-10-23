@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "cellar": {
+      "command": "/absolute/path/to/node",
+      "args": ["/absolute/path/to/cellar-tools/v2/mcp-server.mjs"],
+      "env": {"CELLAR_BACKEND":"sqlite","CELLAR_DB":"/absolute/private/path/cellar.sqlite"}
+    }
+  }
+}
