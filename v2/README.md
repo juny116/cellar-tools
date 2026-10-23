@@ -49,7 +49,7 @@ Styx에서 실행할 때는 서버를 loopback에 유지하고 Mac에서 `ssh -N
 - 제품과 개별 병을 구분합니다. 같은 이름의 제품은 후보로 표시하고 자동 병합하지 않습니다.
 - requestId는 작업마다 한 번 정하고 재시도 때 유지합니다. 새 ID는 새 작업입니다.
 - Notion 초안은 로컬 journal에만 저장되고 검토 후 적용됩니다. 초안은 한 시간 유효합니다.
-- Notion에는 여러 페이지를 묶는 트랜잭션이 없습니다. 중간 실패 시 이미 생성된 제품/병은 남을 수 있습니다. 불확실한 결과나 실행 중 프로세스 종료 시 journal 상태가 running/needs_review로 남고 자동 재생성을 차단합니다. **Notion과 journal을 대조한 수동 복구가 필요하며 복구 UI는 아직 없습니다.** 이때 새 ID로 같은 등록을 반복하지 마세요.
+- Notion에는 여러 페이지를 묶는 트랜잭션이 없습니다. 중간 실패 시 이미 생성된 제품/병은 남을 수 있습니다. 불확실한 결과나 실행 중 프로세스 종료 시 journal 상태가 running/needs_review로 남고 자동 재생성을 차단합니다. `get_operation`으로 상태를 확인하고 `reconcile_change`로 정확한 작업 표식/변경값을 대조합니다. 확인된 성공 결과만 재사용하고, 나머지 미실행 단계는 같은 draftId로 검토 후 재개합니다. 표식이 없거나 중복되면 계속 차단합니다. 프로세스 강제 종료로 running 상태가 남은 경우에는 작업 프로세스 종료를 확인한 운영자 복구가 필요합니다. 복구 UI는 없습니다. 이때 새 ID로 같은 등록을 반복하지 마세요.
 - 수정/소비 전에 대상 페이지 소속과 변경 필드의 현재 값을 다시 검사합니다. 마지막 읽기와 쓰기 사이 경쟁은 Notion의 CAS 부재로 완전히 막을 수 없으므로 같은 병을 여러 클라이언트에서 동시에 수정하지 마세요.
 - 셀러의 기존 select 옵션만 사용합니다. 지원하지 않는 용량은 Notion에 옵션을 먼저 추가해야 합니다. 기본 Price 매핑은 KRW입니다.
 - 사진은 명시적 파일 선택 시 바로 첨부합니다. 업로드 결과가 불확실하면 Notion에서 확인한 뒤 재시도하세요. 외부 이미지 프록시는 Notion/AWS 이미지 호스트만 지원합니다.
@@ -60,3 +60,8 @@ Styx에서 실행할 때는 서버를 loopback에 유지하고 Mac에서 `ssh -N
 v1 회귀 테스트, SQLite 변경/재시도, 실제 stdio MCP 호출, Notion 가상 API 쓰기(관계/첨부 보존·충돌·불확실한 결과), HTTP Origin/CSRF 검증 포함. 실제 Notion에서는 재고 조회와 소비 초안 검토까지 확인했으며 운영 재고 쓰기/사진 업로드는 수행하지 않았습니다.
 
 [Notion 페이지 수정](https://developers.notion.com/reference/patch-page), [파일 업로드](https://developers.notion.com/guides/data-apis/uploading-small-files), [MCP SDK](https://ts.sdk.modelcontextprotocol.io/server)를 참고했습니다.
+
+
+## Claude Desktop / ChatGPT 연결
+
+[연결 및 사용 가이드](CLIENTS.md)를 참고하세요. MCP는 현재 재고 조회/검색, 제품 카탈로그 검색, 개별 병 조회, 구매·페어링 문맥, 취향 저장, 등록·수정·소비 초안/확정, 작업 조회·Notion 복구를 제공합니다. 추천 모델은 연결한 Claude/GPT이며 MCP 자체에서는 유료 LLM API를 호출하지 않습니다. Sakenowa 제품 후보 검색 이외의 최신 판매가/판매처 검색은 클라이언트 웹 검색을 이용합니다.

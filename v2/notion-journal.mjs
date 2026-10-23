@@ -10,6 +10,9 @@ export class Journal {
  save(id,payload,plan){this.db.prepare('INSERT OR IGNORE INTO notion_drafts(id,payload,plan,expires) VALUES(?,?,?,?)').run(id,JSON.stringify(payload),JSON.stringify(plan),Date.now()+3600000);return this.get(id);}
  claim(id){return this.db.prepare("UPDATE notion_drafts SET status='running' WHERE id=? AND status='ready'").run(id).changes===1;}
  finish(id,result){this.db.prepare("UPDATE notion_drafts SET result=?,status='done' WHERE id=?").run(JSON.stringify(result),id);}
+ steps(id){return this.db.prepare('SELECT id,result FROM notion_steps WHERE substr(id,1,?)=?').all(id.length+1,id+':');}
+ resolved(id){const row=this.db.prepare('SELECT result FROM notion_steps WHERE id=?').get(id);return row?.result?JSON.parse(row.result):null;}
+ resolve(id,result){this.db.prepare('UPDATE notion_steps SET result=? WHERE id=? AND result IS NULL').run(JSON.stringify(result),id);}
  async step(id,fn){const prior=this.db.prepare('SELECT result FROM notion_steps WHERE id=?').get(id);if(prior){if(prior.result)return JSON.parse(prior.result);throw new Error('Previous write outcome is uncertain. Inspect Notion before reconciliation; do not create a new request.');}
  this.db.prepare('INSERT INTO notion_steps VALUES (?,NULL)').run(id);
  const result=await fn();this.db.prepare('UPDATE notion_steps SET result=? WHERE id=?').run(JSON.stringify(result),id);return result;}

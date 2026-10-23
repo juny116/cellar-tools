@@ -20,6 +20,8 @@ export class SqliteStore {
     const rows=this.db.prepare(`SELECT b.*,p.data AS product FROM bottles b JOIN products p ON b.product_id=p.id ${includeConsumed?'':"WHERE status='available'"} ORDER BY b.rowid`).all();
     return rows.map(r=>({id:r.id,productId:r.product_id,status:r.status,...JSON.parse(r.data),product:JSON.parse(r.product)}));
   }
+  searchCatalog(query){const q=query.normalize('NFKC').toLowerCase();return this.db.prepare('SELECT * FROM products').all().map(r=>({id:r.id,...JSON.parse(r.data)})).filter(p=>[p.name,p.producer,p.variant,p.vintage].join(' ').normalize('NFKC').toLowerCase().includes(q));}
+  getOperation(id){const row=this.db.prepare('SELECT * FROM drafts WHERE id=?').get(id);if(!row)throw new Error('Unknown draft');return {...this.preview(row),status:row.result?'done':row.expires<Date.now()?'expired':'ready'};}
   getPreferences(){const r=this.db.prepare('SELECT data FROM preferences WHERE id=1').get();return r?JSON.parse(r.data):{likes:[],dislikes:[],notes:''};}
   prepare(requestId,input){
     requestIdSchema.parse(requestId);const payload=changeSchema.parse(input);

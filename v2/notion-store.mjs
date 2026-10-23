@@ -48,6 +48,45 @@ export class NotionStore {
   try{const file=join(dir,basename(filename));await writeFile(file,bytes,{mode:0o600});return await uploadImage(file,id,this.props.photos,{token:this.token,fetchImpl:this.fetch});}
   finally{await rm(dir,{recursive:true,force:true});}
  }
+ async searchCatalog(query){const q=query.normalize('NFKC').toLowerCase();return (await this.rows(this.catalogId)).map(page=>({id:page.id,kind:this.kind,name:text(page.properties[this.props.productTitle]),producer:text(page.properties[this.props.producer]),vintage:text(page.properties[this.props.vintage]),sourceUrl:page.url})).filter(p=>[p.name,p.producer,p.vintage].join(' ').normalize('NFKC').toLowerCase().includes(q));}
+ getOperation(id){const row=this.journal?.get(id);if(!row)throw new Error('Unknown draft');return {...this.preview(row),steps:this.journal.steps(id).map(s=>({id:s.id,status:s.result?'confirmed':'uncertain',pageId:s.result?JSON.parse(s.result).id:null}))};}
+ async reconcile(id){
+  const row=this.journal?.get(id);if(!row)throw new Error('Unknown draft');
+  if(row.status==='done'||row.status==='ready')return this.getOperation(id);
+  // Never reclaim a potentially active writer. Process-crash recovery needs operator verification.
+  if(row.status!=='needs_review')throw new Error('Operation may still be running. Verify its process has stopped before operator recovery; do not repeat it.');
+  if(this.journal.db.prepare("UPDATE notion_drafts SET status='reconciling' WHERE id=? AND status='needs_review'").run(id).changes!==1)throw new Error('Another client is reconciling this draft');
+  const plan=JSON.parse(row.plan),p=this.props;
+  try{
+   for(const step of this.journal.steps(id).filter(s=>!s.result)){
+    let matches=[];
+    if(step.id===id+':patch'){
+     const page=await this.scopedPage(plan.bottleId,this.id);
+     const value=(prop,type)=>type==='rich_text'?text(prop):type==='date'?(prop?.date?.start??null):prop?.[type];
+     if(Object.entries(plan.patch).every(([key,target])=>{const type=Object.keys(target)[0];return canonical(value(page.properties[key],type))===canonical(value(target,type));}))matches=[page];
+    }else if(step.id.startsWith(id+':bottle:')){
+     const index=Number(step.id.slice((id+':bottle:').length));const marker='cellar-op:'+id+':'+(index+1);
+     const productId=plan.productId??this.journal.resolved(id+':product')?.id;
+     matches=(await this.rows(this.id,{property:p.note,rich_text:{contains:marker}})).filter(page=>!page.archived&&!page.in_trash&&page.parent?.data_source_id===this.id&&text(page.properties[p.note]).split('\n').includes(marker)&&page.properties[p.relation]?.relation?.some(r=>r.id===productId));
+    }else if(step.id===id+':product'){
+     const title=text(plan.product.properties[p.productTitle]);
+     for(const page of await this.rows(this.catalogId,{property:p.productTitle,title:{equals:title}})){
+      if(page.archived||page.in_trash||page.parent?.data_source_id!==this.catalogId)continue;
+      let cursor,found=false;
+      do{const blocks=await this.request('/blocks/'+page.id+'/children'+(cursor?'?start_cursor='+encodeURIComponent(cursor):''));
+       found ||= blocks.results.some(b=>text(b[b.type]).split('\n').includes('cellar-op:'+id));cursor=blocks.has_more?blocks.next_cursor:null;
+       if(blocks.has_more&&!cursor)throw new Error('Block pagination missing cursor');
+      }while(cursor);
+      if(found)matches.push(page);
+     }
+    }
+    if(matches.length===1)this.journal.resolve(step.id,{id:matches[0].id,reconciled:true});
+   }
+   const uncertain=this.journal.steps(id).some(s=>!s.result);
+   this.journal.db.prepare('UPDATE notion_drafts SET status=? WHERE id=?').run(uncertain?'needs_review':'ready',id);
+   return {...this.getOperation(id),recovery:uncertain?'Uncertain writes remain blocked. Absence of a marker is not proof of failure.':'Confirmed results recovered. Review then commit the same draft to finish remaining steps.'};
+  }catch(error){this.journal.db.prepare("UPDATE notion_drafts SET status='needs_review' WHERE id=?").run(id);throw error;}
+ }
  getPreferences(){const row=this.journal?.db.prepare('SELECT data FROM notion_preferences WHERE id=1').get();return row?JSON.parse(row.data):{likes:[],dislikes:[],notes:''};}
  async scopedPage(id,source){const page=await this.request(`/pages/${id}`);if(page.archived||page.in_trash||page.parent?.data_source_id!==source)throw new Error('Page is not an active member of the configured data source');return page;}
  async schemas(){const [b,c]=await Promise.all([this.request(`/data_sources/${this.id}`),this.request(`/data_sources/${this.catalogId}`)]);return {b:b.properties,c:c.properties};}
@@ -117,7 +156,7 @@ export class NotionStore {
     }result={action:'add',productId,bottleIds};
    }else{
     const page=await this.scopedPage(plan.bottleId,this.id);
-    for(const k of Object.keys(plan.before))if(canonical(page.properties[k])!==canonical(plan.before[k]))throw new Error('Bottle changed in Notion since preview. Refresh and prepare a new draft.');
+    if(!this.journal.resolved(id+':patch'))for(const k of Object.keys(plan.before))if(canonical(page.properties[k])!==canonical(plan.before[k]))throw new Error('Bottle changed in Notion since preview. Refresh and prepare a new draft.');
     await this.journal.step(id+':patch',()=>this.request(`/pages/${plan.bottleId}`,{properties:plan.patch},'PATCH'));
     result={action:change.action,bottleId:plan.bottleId};
    }
