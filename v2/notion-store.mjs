@@ -4,7 +4,7 @@ import {join,basename} from 'node:path';
 import {uploadImage} from '../src/notion-images.mjs';
 import {Journal} from './notion-journal.mjs';
 import {changeSchema,requestIdSchema} from './schema.mjs';
-const text=x=>(x?.title??x?.rich_text??[]).map(t=>t.plain_text??t.text?.content??'').join('');
+const text=x=>x?.type==='select'?(x.select?.name??''):(x?.title??x?.rich_text??[]).map(t=>t.plain_text??t.text?.content??'').join('');
 const runs=s=>s?String(s).match(/[\s\S]{1,2000}/g).map(content=>({type:'text',text:{content}})):[];
 const rich=s=>({rich_text:runs(s)});
 const canonical=x=>JSON.stringify(x,(_,v)=>v && typeof v==='object' && !Array.isArray(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b))):v);
@@ -106,7 +106,7 @@ export class NotionStore {
   if(!this.capabilities.write)throw new Error('Notion writes require catalogDataSourceId and a persistent journal');
   requestIdSchema.parse(id);const change=changeSchema.parse(input),old=this.journal.get(id);
   if(old){if(canonical(JSON.parse(old.payload))!==canonical(change))throw new Error('Request ID reused with different content');return this.preview(old);}
-  const plan={summary:{candidates:[],note:null}};const p=this.props;
+  const plan={collectionId:this.id,summary:{candidates:[],note:null}};const p=this.props;
   if(change.action==='preferences'){plan.preferences=change.preferences;}
   else {
    const schema=await this.schemas();
@@ -120,7 +120,7 @@ export class NotionStore {
      this.require(schema.c,p.productTitle,'title');this.require(schema.c,p.producer,'rich_text');
      const product=change.product;plan.name=product.name;
      plan.product={parent:{type:'data_source_id',data_source_id:this.catalogId},properties:{[p.productTitle]:{title:[{text:{content:[product.name,product.variant].filter(Boolean).join(' · ')}}]},[p.producer]:rich(product.producer)},children:[{object:'block',type:'paragraph',paragraph:{rich_text:[{type:'text',text:{content:`cellar-op:${id}\n${product.sources.map(x=>`${x.kind}: ${x.reference}${x.note?' — '+x.note:''}`).join('\n')}`.slice(0,2000)}}]}}]};
-     if(product.vintage){this.require(schema.c,p.vintage,'rich_text');plan.product.properties[p.vintage]=rich(product.vintage);}
+     if(product.vintage){const type=schema.c[p.vintage]?.type;if(type==='select'){if(!schema.c[p.vintage].select.options.some(o=>o.name===product.vintage))throw new Error('Vintage option not configured');plan.product.properties[p.vintage]={select:{name:product.vintage}};}else{this.require(schema.c,p.vintage,'rich_text');plan.product.properties[p.vintage]=rich(product.vintage);}}
      const candidates=await this.rows(this.catalogId,{property:p.productTitle,title:{contains:product.name}});plan.summary.candidates=candidates.map(x=>({id:x.id,name:text(x.properties[p.productTitle]),producer:text(x.properties[p.producer]),vintage:text(x.properties[p.vintage])}));
      if(candidates.length)plan.summary.note='비슷한 제품이 있습니다. 기존 제품이라면 해당 제품을 선택해 다시 작성하세요. 적용하면 별도 제품을 만듭니다.';
     }

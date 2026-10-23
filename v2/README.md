@@ -65,3 +65,7 @@ v1 회귀 테스트, SQLite 변경/재시도, 실제 stdio MCP 호출, Notion �
 ## Claude Desktop / ChatGPT 연결
 
 [연결 및 사용 가이드](CLIENTS.md)를 참고하세요. MCP는 현재 재고 조회/검색, 제품 카탈로그 검색, 개별 병 조회, 구매·페어링 문맥, 취향 저장, 등록·수정·소비 초안/확정, 작업 조회·Notion 복구를 제공합니다. 추천 모델은 연결한 Claude/GPT이며 MCP 자체에서는 유료 LLM API를 호출하지 않습니다. Sakenowa 제품 후보 검색 이외의 최신 판매가/판매처 검색은 클라이언트 웹 검색을 이용합니다.
+
+### Existing Notion collections
+
+A config can contain `collections: [{dataSourceId, catalogDataSourceId, kind, properties}, ...]` instead of a single collection. Configure one collection per drink kind. All collections share the persistent journal and preferences; page membership routes existing product and bottle IDs, and each new draft records its collection. Legacy drafts remain assigned to the first collection, so keep the original collection first when upgrading. Both rich-text and existing select options are supported for vintage. Adding a collection does not reconcile stale inventory or infer consumption from a missing import row.
