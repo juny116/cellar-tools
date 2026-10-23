@@ -1,0 +1,9 @@
+{
+  "notion": {
+    "sakeCatalogDataSourceId": "REPLACE_WITH_DATA_SOURCE_ID",
+    "sakeCellarDataSourceId": "REPLACE_WITH_DATA_SOURCE_ID",
+    "sakeTastingDataSourceId": "REPLACE_WITH_DATA_SOURCE_ID",
+    "wineCatalogDataSourceId": "",
+    "wineCellarDataSourceId": ""
+  }
+}

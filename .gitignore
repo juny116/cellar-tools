@@ -18,3 +18,8 @@ checkpoints/
 *.ckpt
 *.pkl
 .DS_Store
+
+config.json
+.cache/
+.data/
+*.sqlite*

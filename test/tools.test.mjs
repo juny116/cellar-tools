@@ -31,7 +31,7 @@ test('upload appends an image and retains existing attachments', async () => {
     await uploadImage(path,'00000000000000000000000000000000','Bottle',{token:'dummy-test-key',fetchImpl});
     const update=JSON.parse(calls.at(-1).body).properties.Bottle.files;
     assert.equal(update.length,2); assert.equal(update[0].name,'old'); assert.equal(update[1].file_upload.id,'upload-test');
-    assert.deepEqual(calls.map(c=>c.method),['POST','POST','GET','PATCH']);
+    assert.deepEqual(calls.map(c=>c.method),['GET','POST','POST','GET','PATCH']);
   } finally {await rm(dir,{recursive:true,force:true});}
 });
 test('missing token fails before reading a file or sending a request', async () => {
